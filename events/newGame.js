@@ -44,9 +44,12 @@ export function newGame(io, socket, gameData, params) {
    if (!params.size || params.size > 20 || params.size < 1) params.size = 11
 
    // Définition du nombre minimum de corridors à placer par chaque utilisateur (n * 3)
-   if (params.size < 6) gameData["numberOfCorridors"] = 0
-   if (params.size >= 6 && params.size <= 8) gameData["numberOfCorridors"] = 1
-   if (params.size > 8) gameData["numberOfCorridors"] = Math.ceil(params.size / 5)
+   if (params.size < 5) gameData["numberOfCorridors"] = 0
+   else if (params.size >= 5 && params.size <= 6) {
+      if (params.user === 2) gameData["numberOfCorridors"] = 2
+      else gameData["numberOfCorridors"] = 1
+   }
+   else if (params.size > 7) gameData["numberOfCorridors"] = Math.ceil(params.size / params.users)
 
    gameData["availableColors"] = colorList.slice(0, params.users || 2)
    gameData["gameBoardSize"] = parseInt(params.size)
