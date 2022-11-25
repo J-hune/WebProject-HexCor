@@ -94,7 +94,7 @@ function checkWinner(io, gameData, color, axe) {
    // Fin du While, aucun chemin trouvé, le joueur n'a pas gagné.
 
    // S'il ne reste plus aucun pion à placer => fin de partie, aucun gagnant
-   const pawnsPlaced = Object.values(gameData.pawns).flat()
+   const pawnsPlaced = Object.values(gameData.pawns).flat().concat(gameData.corridors.map(e => e.id))
    if (pawnsPlaced.length === gameData.gameBoardSize * gameData.gameBoardSize) endGame(io, gameData, false)
 }
 
@@ -118,6 +118,12 @@ export function needToCheckIfWinner(io, gameData, color) {
       gameData.corridors.filter(e => e.type === "NESO" && e.color === color).length,
    )
 
+   const pawnsPlaced = Object.values(gameData.pawns).flat().concat(gameData.corridors.map(e => e.id))
+   const maxPawnPlaced = pawnsPlaced.length === gameData.gameBoardSize * gameData.gameBoardSize
+
+   // S'il ne reste plus de place et qu'il manque des corridors alors on déclenche la fin de la partie
+   if (maxPawnPlaced && numberOfCorridors < gameData.numberOfCorridors) return endGame(io, gameData, false)
+
    if (existPawnLeft && existPawnRight && numberOfCorridors >= gameData.numberOfCorridors) checkWinner(io, gameData, color, "x")
-   if (existPawnBottom && existPawnTop && numberOfCorridors >= gameData.numberOfCorridors) checkWinner(io, gameData, color, "y")
+   else if (existPawnBottom && existPawnTop && numberOfCorridors >= gameData.numberOfCorridors) checkWinner(io, gameData, color, "y")
 }
