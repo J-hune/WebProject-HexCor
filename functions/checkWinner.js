@@ -8,7 +8,18 @@ import {endGame} from "./endGame.js";
  */
 function getNeighbours(pawn, gameData) {
    let size = gameData.gameBoardSize
-   let neighbours = [pawn - (size - 1), pawn - size, pawn - 1, pawn + 1, pawn + (size - 1), pawn + size]
+
+   const corridor = gameData.corridors.find(e => e.id === pawn)
+   let neighbours = []
+
+   //Si le pion actuel est un corridor
+   if (corridor) {
+      if (corridor.type === "OE") neighbours = [pawn - 1, pawn + 1]
+      else if (corridor.type === "NOSE") neighbours = [pawn - (size - 1), pawn + size]
+      else if (corridor.type === "NESO") neighbours = [pawn - size, pawn + (size - 1)]
+   } else {
+      neighbours = [pawn - (size - 1), pawn - size, pawn - 1, pawn + 1, pawn + (size - 1), pawn + size]
+   }
 
    if (gameData.edges.y0.includes(pawn)) neighbours = neighbours.filter(e => e !== pawn + (size - 1) & e !== pawn + size)
    if (gameData.edges.y1.includes(pawn)) neighbours = neighbours.filter(e => e !== pawn - (size - 1) && e !== pawn - size)
@@ -16,8 +27,17 @@ function getNeighbours(pawn, gameData) {
    if (gameData.edges.x0.includes(pawn)) neighbours = neighbours.filter(e => e !== pawn - 1 && e !== pawn + (size - 1))
    if (gameData.edges.x1.includes(pawn)) neighbours = neighbours.filter(e => e !== pawn + 1 && e !== pawn - size)
 
+   //Filtre des voisins corridors pour garder uniquement ceux valides
+   neighbours = neighbours.filter(e => e >= 0 && e <= size * size - 1)
+      .filter(e => {
+         let isCorridor = gameData.corridors.find(f => f.id === e)
+         if (!isCorridor) return true;
 
-   return neighbours.filter(e => e >= 0 && e <= size * size - 1)
+         if (isCorridor.type === "OE" && (e === pawn - 1 || e === pawn + 1)) return true
+         if (isCorridor.type === "NOSE" && (e === pawn + size || e === pawn - size)) return true
+         return isCorridor.type === "NESO" && (e === pawn + (size - 1) || e === pawn - (size - 1));
+      })
+   return neighbours
 }
 
 /**
@@ -29,9 +49,9 @@ function getNeighbours(pawn, gameData) {
  */
 function checkWinner(io, gameData, color, axe) {
    let pawnsTreated = []
-   let pawnsToTreat = []
+   let pawnsToTreat;
    let oppositeEdgePawns;
-   let playerPawns = gameData.pawns[color]
+   let playerPawns = gameData.pawns[color].concat(gameData.corridors.map(e => e.id))
 
    /* Ici on sait :
         - Qu'il y a suffisamment de pions pour que le joueur soit gagnant
@@ -85,11 +105,19 @@ function checkWinner(io, gameData, color, axe) {
  * @param {String} color
  */
 export function needToCheckIfWinner(io, gameData, color) {
-   let existPawnLeft = gameData.edges.x0.some(e => gameData.pawns[color].includes(e))
-   let existPawnRight = gameData.edges.x1.some(e => gameData.pawns[color].includes(e))
-   let existPawnBottom = gameData.edges.y0.some(e => gameData.pawns[color].includes(e))
-   let existPawnTop = gameData.edges.y1.some(e => gameData.pawns[color].includes(e))
+   const existPawnLeft = gameData.edges.x0.some(e => gameData.pawns[color].includes(e) || gameData.corridors.find(f => f.id === e))
+   const existPawnRight = gameData.edges.x1.some(e => gameData.pawns[color].includes(e) || gameData.corridors.find(f => f.id === e))
+   const existPawnBottom = gameData.edges.y0.some(e => gameData.pawns[color].includes(e) || gameData.corridors.find(f => f.id === e))
+   const existPawnTop = gameData.edges.y1.some(e => gameData.pawns[color].includes(e) || gameData.corridors.find(f => f.id === e))
 
-   if (existPawnLeft && existPawnRight) checkWinner(io, gameData, color, "x")
-   if (existPawnBottom && existPawnTop) checkWinner(io, gameData, color, "y")
+   // On calcule le nombre de corridors posés (le minimum des 3)
+   // On vérifie ensuite si le nombre minimum de corridors est respecté (lignes 121-122)
+   const numberOfCorridors = Math.min(
+      gameData.corridors.filter(e => e.type === "OE" && e.color === color).length,
+      gameData.corridors.filter(e => e.type === "NOSE" && e.color === color).length,
+      gameData.corridors.filter(e => e.type === "NESO" && e.color === color).length,
+   )
+
+   if (existPawnLeft && existPawnRight && numberOfCorridors >= gameData.numberOfCorridors) checkWinner(io, gameData, color, "x")
+   if (existPawnBottom && existPawnTop && numberOfCorridors >= gameData.numberOfCorridors) checkWinner(io, gameData, color, "y")
 }

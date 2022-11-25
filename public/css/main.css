@@ -1,3 +1,29 @@
+button {
+    border: solid 1px #8f8f9d;
+    background-color: #e9e9ed;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+button:disabled {
+    opacity: 0.6;
+}
+
+button:not([disabled]):hover {
+    background-color: #D0D0D7;
+    cursor: pointer;
+}
+
+button.active:not([disabled]) {
+    background-color: #8dcaff;
+    border-color: #007dea;
+}
+
+button.active:not([disabled]):hover {
+    background-color: #4babff;
+    border-color: #006ac6;
+}
+
 .d-flex {
     display: flex;
 }
@@ -33,4 +59,8 @@
 
 .tchat .send-message button {
     margin-left: 8px;
+}
+
+#tablier {
+    margin-top: 20px;
 }

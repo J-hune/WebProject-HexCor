@@ -1,15 +1,22 @@
 const socket = io();
 
+//Le type du pion qui va être posé
+let typeNextPion = "Normal"
+
+//Le nombre de corridors à placer (affichage front uniquement)
+let nbCorridorsAPlacer = 0
+
 /* Reçu lors :
       - du load de la page,
       - quand quelqu'un clique sur "nouvelle partie"
       - quand la partie est finie (10sec après une win)
  */
 socket.on('loadGame', async data => {
-   //On vide #gameInfos (si la partie vient de se finir)
+   // On vide #gameInfos (si la partie vient de se finir)
    const node = document.getElementById("gameInfos")
    node.innerHTML = ''
 
+   // Si aucune game n'est en cours
    if (Object.keys(data).length === 0) {
       //Suppression du svg dans #tablier (si la partie vient de se finir)
       const tablier = document.getElementById("tablier")
@@ -21,7 +28,7 @@ socket.on('loadGame', async data => {
       node.insertAdjacentHTML("afterbegin", html);
 
    } else {
-      //Ajout du html permettant de rejoindre la partie
+      // Ajout du html permettant de rejoindre la partie
       const resp = await fetch("board.html");
       const html = await resp.text();
       node.insertAdjacentHTML("afterbegin", html);
@@ -29,7 +36,7 @@ socket.on('loadGame', async data => {
       // Ajout eventListener input nom (pour la fluidité)
       const nameInput = document.getElementById("nom");
 
-      nameInput.addEventListener("keypress", function(event) {
+      nameInput.addEventListener("keypress", function (event) {
          if (event.key === "Enter") {
             event.preventDefault();
             entrerDansLaPartie();
@@ -37,8 +44,11 @@ socket.on('loadGame', async data => {
          }
       });
 
-      //Génération du tablier
+      // Génération du tablier
       generateDamier(20, data.gameBoardSize, data.gameBoardSize);
+
+      // On modifie la variable et on l'affichera plus tard
+      nbCorridorsAPlacer = data.numberOfCorridors
 
       socket.emit('getPlayers');
       socket.emit('getPawns');
@@ -68,7 +78,7 @@ socket.on('loadMessages', data => {
 })
 
 // Reçu lorsqu'un joueur quitte out rejoint la partie
-socket.on('playerListUpdated', data => {
+socket.on('playerListUpdated', async data => {
    // On formate nos données : Object list -> String list -> String
    const players = Object.values(data).map(e => `${e.name} (${e.type})`)
    document.getElementById("listeJoueurs").innerHTML = players.join(", ")
@@ -79,6 +89,17 @@ socket.on('playerListUpdated', data => {
       document.getElementById('joinGame').disabled = true
       document.getElementById('leaveGame').disabled = false
       document.getElementById('nom').disabled = true
+
+      if (!document.getElementById("corridors")) {
+         // On ajoute la partie Corridors
+         const node = document.getElementById("gameInfos")
+         const respCorridors = await fetch("corridors.html");
+         const htmlCorridors = await respCorridors.text();
+         node.insertAdjacentHTML("beforeend", htmlCorridors);
+
+         // On modifie le nombre des corridors affichés (on a reçu cette info avec l'event "loadGame")
+         document.getElementById("nbCorridors").innerHTML = nbCorridorsAPlacer;
+      }
    } else {
       document.getElementById('joinGame').disabled = false
       document.getElementById('leaveGame').disabled = true
@@ -88,22 +109,34 @@ socket.on('playerListUpdated', data => {
 
 // Reçu après le load de la page (si une partie est en cours)
 socket.on('pawnsList', data => {
-   for (let color of Object.keys(data)) {
+   const pawns = data.pawns
+   const corridors = data.corridors
 
-      // Boucle sur les pions et modification de l'attribut css "fill" avec la couleur du joueur
-      for (let pawn of data[color]) {
+   // Boucle sur les couleurs des joueurs
+   for (let color of Object.keys(pawns)) {
+      // Boucle sur les pions de la couleur et modification de l'attribut css "fill" avec la couleur du joueur
+      for (let pawn of pawns[color]) {
          const hexa = document.getElementById("h" + pawn)
          hexa.style.fill = color;
       }
+   }
+
+   // Boucle sur les Corridors
+   for (let corridor of corridors) {
+
+      // Modification de l'attribut css "fill" avec le pattern du corridor
+      // ("#corridorOE", "#corridorNOSE" ou "#corridorNESO")
+      const hexa = document.getElementById("h" + corridor.id)
+      hexa.style.fill = "url(#corridor" + corridor.type + ")";
    }
 });
 
 // Reçu quand un pion est placé
 socket.on('pawnPlaced', data => {
-   console.log(`Le pion ${data.id} vient d'être placé (${data.color})`)
+   console.log(`Le pion ${data.id} vient d'être placé (${data.color || "Corridor " + data.type})`)
 
    const hexa = document.getElementById("h" + data.id)
-   hexa.style.fill = data.color;
+   hexa.style.fill = data.color || "url(#corridor" + data.type + ")";
 })
 
 // Reçu quand la partie est terminée
@@ -115,7 +148,7 @@ socket.on('stopGame', data => {
 
    const message = document.createElement("div")
 
-   if(data) {
+   if (data) {
       const messageValue = document.createTextNode(`WINNER! Le joueur ${data.color} vient de gagner avec ${data.pawns} pions`);
       message.appendChild(messageValue);
 
@@ -182,13 +215,20 @@ function entrerDansLaPartie() {
 
 function quitterLaPartie() {
    socket.emit('removePlayer');
+
+   // La div contenant la liste des corridors est supprimée
+   const corridorDiv = document.getElementById("corridors");
+   corridorDiv.parentNode.removeChild(corridorDiv);
 }
 
 function handleClickHexa(id) {
    const hexa = document.getElementById("h" + id)
    if (!!hexa.style.fill) return;
 
-   socket.emit('addPawn', {id: id});
+   socket.emit('addPawn', {id: id, type: typeNextPion !== "Normal" ? typeNextPion : null});
+
+   // On définit typeNextPion sur "Normal" pour que le placement d'un corridor soit une opération délibérée
+   if (typeNextPion !== "Normal") handleChangeTypePawn("Normal")
 }
 
 function creeHexagone(rayon) {
@@ -204,11 +244,38 @@ function creeHexagone(rayon) {
 
 function generateDamier(rayon, nbLignes, nbColonnes) {
    const distance = rayon - (Math.sin(Math.PI / 3) * rayon);  // plus grande distance entre l'hexagone et le cercle circonscrit
-
-   d3.select("#tablier")
+   const svg = d3.select("#tablier")
       .append("svg")
-      .attr("width", 1.8 * rayon * nbLignes + 0.82 * rayon * nbColonnes)
-      .attr("height", nbLignes * 2 * rayon);
+      .attr("width", (nbLignes + 1 / 2 * (nbColonnes + 1)) * Math.sqrt(3) * rayon)
+      .attr("height", (nbLignes + 1 / 3) * 3 / 2 * rayon);
+
+   const defs = svg.append("defs")
+   defs.append("pattern")
+      .attr('id', 'corridorOE')
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .append('path')
+      .attr("d", "M 0,20 L 50,20")
+      .attr('stroke', "black")
+      .attr('stroke-width', "8");
+
+   defs.append("pattern")
+      .attr('id', 'corridorNOSE')
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .append('path')
+      .attr("d", "M 5,0 L 36,50")
+      .attr('stroke', "black")
+      .attr('stroke-width', "8");
+
+   defs.append("pattern")
+      .attr('id', 'corridorNESO')
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .append('path')
+      .attr("d", "M -2,50 L 30,0")
+      .attr('stroke', "black")
+      .attr('stroke-width', "8");
 
    const hexagone = creeHexagone(rayon);
    for (let ligne = 0; ligne < nbLignes; ligne++) {
@@ -230,11 +297,17 @@ function generateDamier(rayon, nbLignes, nbColonnes) {
             .attr("stroke", "black")
             .attr("fill", "white")
             .attr("id", "h" + id)
-            .on("click", function (d) {
+            .on("click", function () {
                handleClickHexa(id)
             });
       }
    }
+}
+
+function handleChangeTypePawn(type) {
+   document.getElementById("place" + typeNextPion).classList.remove("active")
+   document.getElementById("place" + type).classList.add("active")
+   typeNextPion = type;
 }
 
 function sendMessage() {
@@ -266,7 +339,7 @@ window.addEventListener('load', () => {
    // Ajout eventListener input tchat (pour la fluidité)
    const tchatInput = document.getElementById("message");
 
-   tchatInput.addEventListener("keypress", function(event) {
+   tchatInput.addEventListener("keypress", function (event) {
       if (event.key === "Enter") {
          event.preventDefault();
          sendMessage();

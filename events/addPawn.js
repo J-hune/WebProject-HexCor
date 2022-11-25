@@ -22,18 +22,29 @@ export function addPawn(io, socket, gameData, params) {
       return socket.emit("error", {error: "Ce n'est pas à votre tour de jouer, c'est au tour du joueur " + gameData.playerOrder[0]})
    }
 
-   //Vérification que le pion n'appartienne à personne
-   if (Object.keys(gameData.pawns).find(key => gameData.pawns[key].includes(params.id))) {
-      return socket.emit("error", {error: "Le pion appartient à l'adversaire"})
+   //Vérification que le pion n'est pas déjà posé
+   const pawnAtThisPlace = Object.keys(gameData.pawns).find(key => gameData.pawns[key].includes(params.id))
+   const corridorAtThisPlace = gameData.corridors.includes(params.id)
+   if (pawnAtThisPlace || corridorAtThisPlace) {
+      return socket.emit("error", {error: "Le pion appartient déjà à quelqu'un"})
+   }
+
+   //Si le pion n'est pas un corridor
+   if (!params.type) {
+
+      //Le pion est ajouté à l'utilisateur et un event est émis pour modifier le front
+      gameData.pawns[color].push(params.id)
+      io.sockets.emit("pawnPlaced", {id: params.id, color: color})
+   } else {
+
+      //Le corridor est ajouté à l'utilisateur et un event est émis pour modifier le front
+      gameData.corridors.push({id: params.id, type: params.type, color: color})
+      io.sockets.emit("pawnPlaced", {id: params.id, type: params.type})
    }
 
    //Le joueur vient de jouer, il est placé en dernier dans la file
    gameData.playerOrder.push(gameData.playerOrder.shift());
 
-   //Le pion est ajouté à l'utilisateur et un event est émis pour modifier le front
-   gameData.pawns[color].push(params.id)
-   io.sockets.emit("pawnPlaced", {id: params.id, color: color})
-
    //Vérification si le joueur a gagné
-   if (gameData.pawns[color].length >= gameData.gameBoardSize) needToCheckIfWinner(io, gameData, color)
+   if (gameData.pawns[color].length + gameData.corridors.length >= gameData.gameBoardSize) needToCheckIfWinner(io, gameData, color)
 }

@@ -4,5 +4,5 @@
  * @param {Object} GameData
  */
 export function getPawns(socket, GameData) {
-   socket.emit('pawnsList', GameData.pawns)
+   socket.emit('pawnsList', {pawns: GameData.pawns, corridors: GameData.corridors})
 }
